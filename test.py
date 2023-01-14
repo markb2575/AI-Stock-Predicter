@@ -1,50 +1,40 @@
-from keras.models import load_model
-import numpy as np
-import matplotlib.pyplot as plt
-import yfinance as yf
-yf.pdr_override()
-from datetime import date
-from pandas_datareader import data as pdr
-import os
+import requests
+import csv
+import pandas as pd
 import random
+from keras.models import load_model
+import matplotlib.pyplot as plt
+import numpy as np
 
-model = load_model('models_new.h5', compile=False)
-today = date.today()
-data = pdr.get_data_yahoo("AMD", start="1970-01-01" , end=today)
-data = data.iloc[:,3].astype('float32').values
-rand = random.randint(1000,(data.shape[0]-1000)) * -1
-temp = data[rand:rand+30]
+model = load_model('intraday/SPY.h5', compile=False)
+url = f'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=SPY&interval=5min&outputsize=compact&datatype=csv&apikey=Q7ORN7T6T1JMH3PB'
+# url = f'https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol=SPY&interval=5min&datatype=csv&apikey=Q7ORN7T6T1JMH3PB'
+with requests.Session() as s:
+    download = s.get(url)
+decoded_content = download.content.decode('utf-8')
+cr = csv.reader(decoded_content.splitlines(), delimiter=',')
+df = pd.DataFrame(cr)
+df.columns = df.iloc[0]
+df = df[1:]
+df = df.iloc[::-1]
+df = df.iloc[:,1:5]
+data = df.astype('float32').values
+
 max_val = data.max()
 min_val = data.min()
 data=(data-min_val)/(max_val-min_val)
-
-data = data[rand-60:rand]
+data = data[df.shape[0]-48:df.shape[0]]
 x = []
 x.append(data)
 dataPredict = np.array(x)
-
-for i in range(60):
-    prediction = model.predict(dataPredict)
-    if i == 0 or i == 59:
-         print(f'the prediction was {prediction}')
-    dataPredict[0] = np.roll(dataPredict[0],-1)
-    dataPredict[0][-1] = prediction
-
-
-dataPredict = dataPredict * (max_val - min_val) + min_val
+prediction = model.predict(dataPredict)
+prediction = prediction * (max_val - min_val) + min_val
 data = data * (max_val - min_val) + min_val
-
-totaldiff = 0
-for i in range(30): 
-    diff = (dataPredict[0][i] - temp[i])/temp[i]
-    diff*=100
-    print(f'{diff:.2f}% difference')
-    totaldiff += diff
-# totaldiff /= 30
-# print(f'{totaldiff:.2f}% average difference')
-
-x = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,29]
-plt.plot(x,temp, color = 'black', label = 'Stock Price')
-plt.plot(x,dataPredict[0][:30], color = 'blue', label = 'Prediction Price')
+plt.plot(data[:,3], color = 'black', label = 'Stock Price')
+plt.plot(data.shape[0],data[data.shape[0]-1][3], marker="o", markersize=5, markeredgecolor="red", markerfacecolor="red")
+plt.plot(data.shape[0]+24,prediction[0][0], marker="o", markersize=5, markeredgecolor="red", markerfacecolor="red")
 plt.show()
-
+# plt.plot(data[:,3], color = 'black', label = 'Stock Price')
+# plt.plot(rand,data[-1][3], marker="o", markersize=5, markeredgecolor="red", markerfacecolor="red")
+# plt.plot(rand+24,prediction[0][0], marker="o", markersize=5, markeredgecolor="red", markerfacecolor="red")
+# plt.show()
